@@ -1,0 +1,107 @@
+#pragma config FOSC = HS    
+#pragma config WDTE = OFF   
+#pragma config PWRTE = OFF  
+#pragma config BOREN = OFF 
+#pragma config LVP = OFF    
+#pragma config CPD = OFF    
+#pragma config WRT = OFF    
+#pragma config CP = OFF     
+
+#include <xc.h>
+#include <stdio.h>         
+// ============================================================================
+// SIMPLE MACRO DEFINITIONS
+// ============================================================================
+#define _XTAL_FREQ   20000000   // 20 MHz Crystal Frequency
+#define BAUD_RATE    9600       // UART Baud Rate
+#define SPBRG_VAL    (((_XTAL_FREQ / 16) / BAUD_RATE) - 1)
+
+#define TOTAL_PRIMES 10         // We want the first 10 prime numbers
+#define START_KEY    'S'        // UART condition: Press 'S' to start
+
+// ============================================================================
+// SIMPLE FUNCTIONS
+// ============================================================================
+
+// Initialize UART (Serial Communication)
+void UART_Init(void) {
+    TRISC6 = 0;          // TX pin is Output (RC6)
+    TRISC7 = 1;          // RX pin is Input  (RC7)
+    
+    SPBRG = SPBRG_VAL;   // Set Baud Rate to 9600
+    TXSTAbits.BRGH = 1;  // High Speed mode
+    TXSTAbits.SYNC = 0;  // Asynchronous mode
+    
+    RCSTAbits.SPEN = 1;  // Enable Serial Port
+    TXSTAbits.TXEN = 1;  // Enable Transmission
+    RCSTAbits.CREN = 1;  // Enable Reception
+}
+
+// Send one character over UART
+void UART_Write_Char(char data) {
+    while (!TXSTAbits.TRMT); // Wait until transmit buffer is empty
+    TXREG = data;            // Send character
+}
+
+// Send a full text string over UART
+void UART_Write_String(char *str) {
+    while (*str != '\0') {   // Loop until end of string
+        UART_Write_Char(*str);
+        str++;               // Move to next character
+    }
+}
+
+// Wait and read one character from UART
+char UART_Read_Char(void) {
+    while (!PIR1bits.RCIF);  // Wait until data is received
+    return RCREG;            // Return received character
+}
+
+// Check if a number is prime (Returns 1 if Prime, 0 if Not Prime)
+int Is_Prime(int num) {
+    if (num < 2) return 0;   // 0 and 1 are not prime numbers
+    
+    // Check if any number divides it perfectly
+    for (int i = 2; i <= (num / 2); i++) {
+        if (num % i == 0) {
+            return 0;        // Remainder is 0, so not a prime
+        }
+    }
+    return 1;                // It is a prime number!
+}
+
+// ============================================================================
+// MAIN PROGRAM
+// ============================================================================
+void main(void) {
+    char buffer[30];         // Memory buffer to hold formatted text
+    
+    UART_Init();             // Start UART peripheral
+    
+    UART_Write_String("\r\nPress 'S' to get 10 Prime Numbers:\r\n");
+
+    while (1) {
+        // --- UART CONDITION ---
+        // Read incoming UART character and check if it matches START_KEY ('S')
+        if (UART_Read_Char() == START_KEY) {
+            
+            int count = 0;   // How many primes found so far
+            int num = 2;     // Start checking numbers from 2
+            
+            // Loop until we find 10 primes
+            while (count < TOTAL_PRIMES) {
+                
+                if (Is_Prime(num) == 1) {
+                    count++; // Increase found count
+                    
+                    // Convert number to text and send over UART
+                    sprintf(buffer, "Prime %d: %d\r\n", count, num);
+                    UART_Write_String(buffer);
+                }
+                num++;       // Check the next number
+            }
+            
+            UART_Write_String("\r\nFinished! Press 'S' to run again.\r\n");
+        }
+    }
+}
